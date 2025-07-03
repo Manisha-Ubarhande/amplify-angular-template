@@ -25,6 +25,7 @@
               "src/assets"
             ],
             "styles": [
+              "node_modules/@aws-amplify/ui-angular/theme.css",
               "src/styles.css"
             ],
             "scripts": []
@@ -91,5 +92,8 @@
         }
       }
     }
+  },
+  "cli": {
+    "analytics": "4117d05c-31f5-408c-b525-9596e53f1df5"
   }
 }
