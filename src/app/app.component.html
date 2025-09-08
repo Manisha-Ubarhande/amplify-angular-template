@@ -1,11 +1,307 @@
+<amplify-authenticator [hideSignUp]="true">
+  <ng-template amplifySlot="authenticated">
+    <div class="s3-container">
+      <header class="s3-header">
+        <div class="header-left">
+          <div class="aws-logo">
+            <img class="service-icon" src="\assets\NBCUniversalLogoWhite.png" />
+            <span class="service-name">S3 Explorer</span>
+          </div>
+        </div>
+        <div class="header-center">
+          <h1></h1>
+        </div>
+        <div class="header-right">
+          <button (click)="signOut()" class="signout-btn">Sign Out</button>
+        </div>
+      </header>
 
-<amplify-authenticator>
-  <ng-template
-    amplifySlot="authenticated"
-    let-user="user"
-    let-signOut="signOut"
-  >
-  <app-todos></app-todos>
-  <button (click)="signOut()">Sign Out</button>
+      <main class="s3-main">
+        
+        <div *ngIf="currentView === 'objects'" class="breadcrumb-nav">
+          <button (click)="navigateToBuckets()" class="breadcrumb-btn">
+            Buckets
+          </button>
+          <span class="breadcrumb-separator">/</span>
+          <button (click)="navigateToPath(-1)" class="breadcrumb-btn bucket-name-breadcrumb">
+            {{ currentBucket }}
+          </button>
+          <ng-container *ngFor="let part of pathParts; let i = index">
+            <span class="breadcrumb-separator">/</span>
+            <button (click)="navigateToPath(i)" class="breadcrumb-btn">
+              {{ part }}
+            </button>
+          </ng-container>
+        </div>
+
+        <div class="content-header">
+          <div class="title-section">
+            <h2 *ngIf="currentView === 'buckets'">Buckets</h2>
+            
+          </div>
+        </div>
+
+        <input
+          type="file"
+          (change)="onFileSelected($event)"
+          style="display: none"
+          #fileInput
+        />
+
+        <div *ngIf="isUploading || uploadStatus" class="upload-progress-container">
+          <div class="upload-progress-bar">
+            <div class="upload-progress-fill" [style.width.%]="uploadProgress"></div>
+          </div>
+          <p class="upload-status-text">{{ uploadStatus }} <span *ngIf="isUploading">- {{ uploadProgress }}%</span></p>
+        </div>
+
+        <div class="buckets-table-container">
+          <div class="table-header">
+            <div class="table-actions">
+              <div class="search-container">
+                <img class="search-icon" src="assets/search-2.png" alt="Search Icon" />
+                <input
+                  type="text"
+                  [(ngModel)]="searchTerm"
+                  [placeholder]="currentView === 'buckets' ? 'Find buckets by name' : 'Find objects by name'"
+                  class="search-input"
+                />
+              </div>
+            </div>
+            <div class="table-actions-right">
+              <button class="btn btn-icon-only" (click)="onRefresh()" title="Refresh">
+                <img class="refresh-icon" src="\assets\icons8-refresh-50-2.png" />
+              </button>
+
+              <!-- Buttons for Objects View -->
+              <ng-container *ngIf="currentView === 'objects'">
+                <button
+                  class="btn btn-primary"
+                  (click)="onCopyS3Uri()"
+                  [disabled]="!hasSelectedItems()">
+                  <span class="btn-icon"></span>
+                  Copy S3 URI
+                </button>
+                <button
+                  class="btn btn-primary"
+                  (click)="onCopyUrl()"
+                  [disabled]="!hasSelectedItems()">
+                  <span class="btn-icon"></span>
+                  Copy URL
+                </button>
+                <button
+                  class="btn btn-download"
+                  (click)="onDownload()"
+                  [disabled]="!hasSelectedFiles()">
+                  <span class="btn-icon"></span>
+                  Download
+                </button>
+                <button
+                  class="btn btn-danger"
+                  (click)="onDelete()"
+                  [disabled]="isDeleteButtonDisabled">
+                  <span class="btn-icon"></span>
+                  Delete
+                </button>
+                <button
+                  class="btn btn-primary"
+                  (click)="onActions()">
+                  <span class="btn-icon"></span>
+                  Actions
+                </button>
+                <button
+                  class="btn btn-primary"
+                  (click)="onCreateFolder()">
+                  <span class="btn-icon"></span>
+                  Create folder
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  (click)="onUpload()"
+                  [disabled]="isUploading"
+                  [class.uploading]="isUploading"
+                >
+                  <span class="btn-icon"></span>
+                  {{ isUploading ? 'Uploading...' : 'Upload' }}
+                </button>
+              </ng-container>
+
+              <!-- Buttons for Buckets View -->
+              <ng-container *ngIf="currentView === 'buckets'">
+                <button
+                  class="btn btn-primary"
+                  (click)="onCopyArn()"
+                  [disabled]="!bucketName">
+                  <span class="btn-icon"></span>
+                  Copy ARN
+                </button>
+                <button
+                  class="btn btn-primary"
+                  (click)="onEmptyBucket()"
+                  [disabled]="true">
+                  <span class="btn-icon"></span>
+                  Empty
+                </button>
+              </ng-container>
+            </div>
+          </div>
+
+          <!-- Buckets Table -->
+          <div *ngIf="currentView === 'buckets'" class="buckets-table">
+            <div class="table-header-row">
+              <div class="table-cell header-cell"></div>
+              <div class="table-cell header-cell">Name</div>
+              <div class="table-cell header-cell">AWS Region</div>
+              <div class="table-cell header-cell">Access</div>
+              <div class="table-cell header-cell">Date created</div>
+            </div>
+
+            <div
+              *ngFor="let bucket of filteredBuckets()"
+              class="table-row"
+              [class.selected]="bucket === bucketName"
+            >
+              <div class="table-cell" (click)="$event.stopPropagation()">
+                <input
+                  type="radio"
+                  name="selectedBucket"
+                  [checked]="bucket === bucketName"
+                  (change)="selectBucketRadio(bucket)" />
+              </div>
+              <div class="table-cell bucket-name" (click)="navigateToBucket(bucket)">
+                <span class="bucket-icon"></span>
+                {{ bucket }}
+              </div>
+              <div class="table-cell">us-east-1</div>
+              <div class="table-cell">
+                <span class="access-badge private">Private</span>
+              </div>
+              <div class="table-cell">{{ getRandomDate() }}</div>
+            </div>
+
+            <div *ngIf="filteredBuckets().length === 0" class="empty-state">
+              <div class="empty-icon"></div>
+              <h3>No buckets found</h3>
+              <p>No buckets match your search criteria</p>
+            </div>
+          </div>
+
+          <!-- Objects Table -->
+          <div *ngIf="currentView === 'objects'" class="buckets-table">
+            <div class="table-header-row">
+              <div class="table-cell header-cell">
+                <input
+                  type="checkbox"
+                  [checked]="isAllSelected()"
+                  [indeterminate]="isSomeSelected()"
+                  (change)="toggleSelectAll($event)"
+                />
+              </div>
+              <div class="table-cell header-cell">Name</div>
+              <div class="table-cell header-cell">Type</div>
+              <div class="table-cell header-cell">Size</div>
+              <div class="table-cell header-cell">Storage class</div>
+              <div class="table-cell header-cell">Last modified</div>
+            </div>
+
+            <div
+              *ngFor="let obj of getCurrentObjects()"
+              class="table-row"
+              (click)="handleRowClick(obj, $event)"
+              [class.selected-row]="isObjectSelected(obj.path)"
+            >
+              <div class="table-cell" (click)="$event.stopPropagation()">
+                <input
+                  type="checkbox"
+                  [checked]="isObjectSelected(obj.path)"
+                  (change)="toggleObjectSelection(obj.path, $event)"
+                />
+              </div>
+              <div class="table-cell object-name" [class.folder-name]="obj.type === 'folder'">
+                <span class="object-icon" [class.folder-icon]="obj.type === 'folder'">
+                  
+                  <svg *ngIf="obj.type === 'folder'" width="16" height="16" viewBox="0 0 16 16" class="folder-svg">
+                    <!-- Main folder body -->
+                    <rect x="1" y="5" width="14" height="8"
+                          fill="none"
+                          stroke="#000000"
+                          stroke-width="1"/>
+                    <!-- Folder tab -->
+                    <path d="M1 5h4l1-1.5h3"
+                          fill="none"
+                          stroke="#000000"
+                          stroke-width="1"/>
+                  </svg>
+                  
+                  <svg *ngIf="obj.type === 'file'" width="16" height="16" viewBox="0 0 16 16" class="file-svg">
+                    <path d="M3 2v12c0 0.5 0.5 1 1 1h8c0.5 0 1-0.5 1-1V5.5L10.5 2H4c-0.5 0-1 0.5-1 1z" fill="#ffffff" stroke="#bdc3c7" stroke-width="1"/>
+                    <path d="M10.5 2v3.5c0 0.3 0.2 0.5 0.5 0.5H14" fill="none" stroke="#bdc3c7" stroke-width="1"/>
+                    <path d="M10.5 2L13 4.5" stroke="#bdc3c7" stroke-width="1"/>
+                  </svg>
+                </span>
+                {{ obj.name }}
+              </div>
+              <div class="table-cell">
+                <span *ngIf="obj.type === 'folder'" class="folder-badge">Folder</span>
+                <span *ngIf="obj.type === 'file'">-</span>
+              </div>
+              <div class="table-cell">{{ obj.size || '-' }}</div>
+              <div class="table-cell">{{ obj.storageClass || '-' }}</div>
+              <div class="table-cell">{{ obj.lastModified }}</div>
+            </div>
+
+            <div *ngIf="getCurrentObjects().length === 0" class="empty-state">
+              <div class="empty-icon"></div>
+              <h3>No objects found</h3>
+              <p *ngIf="!searchTerm">This folder is empty</p>
+              <p *ngIf="searchTerm">No objects match your search criteria</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Custom Confirmation Modal -->
+      <div *ngIf="showConfirmationModal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Confirm Action</h3>
+            <button class="close-button" (click)="cancelConfirmation()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p>{{ confirmationMessage }}</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" (click)="cancelConfirmation()">Cancel</button>
+            <button class="btn btn-danger" (click)="executeConfirmation()">Confirm</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create Folder Modal -->
+      <div *ngIf="showCreateFolderModal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Create New Folder</h3>
+            <button class="close-button" (click)="cancelCreateFolder()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <label for="newFolderName" class="block text-sm font-medium text-gray-700 mb-2">Folder Name:</label>
+            <input
+              type="text"
+              id="newFolderName"
+              [(ngModel)]="newFolderName"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              placeholder="Enter folder name"
+            />
+            <p *ngIf="createFolderMessage" class="mt-2 text-sm text-red-600">{{ createFolderMessage }}</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" (click)="cancelCreateFolder()">Cancel</button>
+            <button class="btn btn-primary" (click)="confirmCreateFolder()">Create</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </ng-template>
 </amplify-authenticator>

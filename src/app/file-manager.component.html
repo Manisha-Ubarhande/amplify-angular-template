@@ -1,0 +1,18 @@
+<div style="padding: 20px;">
+  <h2>My Files</h2>
+
+  <div *ngIf="files.length > 0">
+    <ul>
+      <li *ngFor="let file of files">
+        {{ file.key }}
+        <button (click)="downloadFile(file.key)">Download</button>
+        <button (click)="deleteFile(file.key)">Delete</button>
+      </li>
+    </ul>
+  </div>
+
+  <div>
+    <input type="file" (change)="onFileSelected($event)" />
+    <button (click)="uploadFile()">Upload</button>
+  </div>
+</div>
